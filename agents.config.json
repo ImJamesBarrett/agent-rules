@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Project rules",
+    "rulesDir": "./.agents",
+    "outDir": "./",
+    "files": ["AGENTS.md"],
+    "includes": ["_index.md"]
+  }
+]

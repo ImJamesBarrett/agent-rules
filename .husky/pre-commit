@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -e
+
+# Lint & format staged files (includes markdownlint for *.md)
+pnpm exec lint-staged
+
+# Type-check entire project
+pnpm run types

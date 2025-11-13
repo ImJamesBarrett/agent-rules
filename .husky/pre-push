@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -e
+
+# Lint, format check, type-check, and tests before pushing
+pnpm run lint
+pnpm run format:check
+pnpm run lint:md
+pnpm run types
+pnpm run test

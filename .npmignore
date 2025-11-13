@@ -1,0 +1,29 @@
+# Exclude sources and configs from published package
+src/
+examples/
+.github/
+.vscode/
+.idea/
+coverage/
+scripts/
+agents.config.json
+pnpm-lock.yaml
+vitest.config.ts
+commitlint.config.cjs
+.lintstagedrc*
+.markdownlint*
+
+# Config files not needed in the tarball
+eslint.config.mjs
+.eslintrc*
+.prettier*
+tsconfig.json
+
+# Source maps and TypeScript sources
+*.map
+*.ts
+*.tsx
+
+# Keep dist/ and README.md for npm consumers
+!dist/
+!README.md

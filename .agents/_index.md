@@ -1,0 +1,7 @@
+**@imjamesbarrett/agent-rules** is a TypeScript CLI tool that automatically generates markdown rule
+documentation files from a centralised rules library. Instead of duplicating project guidelines
+across multiple repositories, you maintain a single central rules directory (typically `~/.agents`)
+and use this tool to generate project-specific markdown files that pull in relevant rules. Configure
+which rules apply to your project via `agents.config.json`, then run `agent-rules generate` to
+produce customised documentation with hierarchical organisation, flexible include/exclude patterns,
+and automatic formatting.

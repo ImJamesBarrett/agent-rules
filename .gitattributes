@@ -1,0 +1,18 @@
+# Normalize line endings and set sensible diffs
+* text=auto eol=lf
+
+*.js  text eol=lf diff=javascript
+*.mjs text eol=lf diff=javascript
+*.cjs text eol=lf diff=javascript
+*.ts  text eol=lf diff=javascript
+*.tsx text eol=lf diff=javascript
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.sh   text eol=lf
+
+# Mark generated assets so GitHub hides them in diffs
+dist/* linguist-generated=true
+examples/out/* linguist-generated=true
+

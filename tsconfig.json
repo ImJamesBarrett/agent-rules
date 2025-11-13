@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node", "vitest"]
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["dist", "coverage", "examples/out", "node_modules"],
+  "ts-node": {
+    "files": true
+  },
+  "watchOptions": {
+    "excludeDirectories": ["dist", "coverage", "examples/out", "node_modules"]
+  }
+}

@@ -11,9 +11,9 @@ for your project.
 ## Quick start (no install)
 
 - npm (npx)
-  - `npx -y @imjamesbarrett/agent-rules agent-rules generate`
+  - `npx -y @imjamesbarrett/agent-rules generate`
 - pnpm
-  - `pnpm dlx @imjamesbarrett/agent-rules agent-rules generate`
+  - `pnpm dlx @imjamesbarrett/agent-rules generate`
 
 ## Install
 
@@ -22,7 +22,7 @@ for your project.
 ```json
 {
   "devDependencies": {
-    "@imjamesbarrett/agent-rules": "^0.1.0"
+    "@imjamesbarrett/agent-rules": "^0.1.1"
   },
   "scripts": {
     "rules:generate": "agent-rules generate"
@@ -183,7 +183,7 @@ Examples of accepted shapes:
 Run with a custom config:
 
 ```bash
-npx -y @imjamesbarrett/agent-rules agent-rules generate \
+npx -y @imjamesbarrett/agent-rules generate \
   --config ./examples/agents.config.json \
   --output-root .
 ```

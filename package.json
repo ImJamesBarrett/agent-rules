@@ -1,6 +1,6 @@
 {
   "name": "@imjamesbarrett/agent-rules",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript CLI to generate markdown rule files from a central rules directory.",
   "private": false,
   "license": "MIT",

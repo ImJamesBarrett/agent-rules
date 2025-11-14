@@ -22,7 +22,7 @@ for your project.
 ```json
 {
   "devDependencies": {
-    "@imjamesbarrett/agent-rules": "^0.1.1"
+    "@imjamesbarrett/agent-rules": "^0.2.0"
   },
   "scripts": {
     "rules:generate": "agent-rules generate"

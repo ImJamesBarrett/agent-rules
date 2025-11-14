@@ -22,7 +22,7 @@ for your project.
 ```json
 {
   "devDependencies": {
-    "@imjamesbarrett/agent-rules": "^0.1.1"
+    "@imjamesbarrett/agent-rules": "^0.2.0"
   },
   "scripts": {
     "rules:generate": "agent-rules generate"
@@ -51,27 +51,40 @@ Top‑level array of objects. Each object writes one or more files with the same
     "title": "Subfolder rules",
     "outDir": "./resources/",
     "files": ["AGENTS.md"],
-    "rulesDir": "~/.agents",
-    "includes": [
-      "lorem-ipsum", // all lorem ipsum rules
-      "lorem-ipsum/food-ipsum/hotdog-ipsum.md" // plus a single rule
-    ],
-    "excludes": [
-      "lorem-ipsum/animal-ipsum", // exclude a folder
-      "lorem-ipsum/food-ipsum/coffee-ipsum.md" // exclude exact file
+    "rulesDir": [
+      {
+        "path": "~/.agents",
+        "includes": [
+          "lorem-ipsum", // all lorem ipsum rules
+          "lorem-ipsum/food-ipsum/hotdog-ipsum.md" // plus a single rule
+        ],
+        "excludes": [
+          "lorem-ipsum/animal-ipsum", // exclude a folder
+          "lorem-ipsum/food-ipsum/coffee-ipsum.md" // exclude exact file
+        ]
+      }
     ]
   },
   {
     "title": "Root rules",
     "outDir": "./",
     "files": ["AGENTS.md", "CLAUDE.md"],
-    "rulesDir": "~/.agents",
-    "includes": [
-      "lorem-ipsum/developer-ipsum", // folder
-      "lorem-ipsum/food-ipsum" // folder
-    ],
-    "excludes": [
-      "lorem-ipsum/food-ipsum/cupcake-ipsum.md" // exact file
+    "rulesDir": [
+      {
+        "path": "~/.agents",
+        "includes": [
+          "lorem-ipsum/developer-ipsum", // folder
+          "lorem-ipsum/food-ipsum" // folder
+        ],
+        "excludes": [
+          "lorem-ipsum/food-ipsum/cupcake-ipsum.md" // exact file
+        ]
+      },
+      {
+        "path": "./.agents",
+        "includes": "*", // include everything from project rules
+        "excludes": ["wip"] // optional project-only excludes
+      }
     ],
     "maxHeadingDepth": 4 // optional; default is 4
   }
@@ -83,16 +96,21 @@ Top‑level array of objects. Each object writes one or more files with the same
 - `title` (string): H1 at the top of each output file.
 - `outDir` (string): output directory (relative to project root or `--output-root`).
 - `files` (string[]): file names to write; all receive the same content.
-- `includes` (string | string[]): path prefixes within `rulesDir` to include (folder or file).
-  - You may pass a single string (will be coerced to an array) or an array of non‑empty strings.
-- `excludes` (string | string[]): path prefixes to exclude; excludes win over includes.
-  - You may pass a single string (will be coerced to an array) or an array of non‑empty strings.
-- `rulesDir` (string): rules directory for this block (default `~/.agents`, `~` expanded).
+- `rulesDir` (RulesSource[]): ordered list of rule sources to merge.
+  - `path` (string): directory containing Markdown rules (relative or absolute; `~` expands).
+  - `includes` (string | string[]): prefixes within that directory to include. Use `"*"` to include
+    everything under the source before applying excludes.
+  - `excludes` (string | string[], optional): prefixes to drop after includes; excludes win over
+    includes.
+  - Later entries override earlier ones when their relative paths (including `_index.md`) match.
 - `maxHeadingDepth` (number): deepest folder heading rendered (H2..H6; default 4).
 
-## Rules directory (rulesDir)
+## Rules sources (rulesDir)
 
-Default `~/.agents`. Structure it how you like. Example:
+Each block declares `rulesDir` as an array of sources. Every source points at a directory, declares
+which prefixes to include (or `"*"` for all of them), and can optionally exclude additional
+prefixes. Later sources overlay earlier ones so project-specific rules can override shared guidance.
+Structure each source directory however you like. Example:
 
 ```txt
 ~/.agents/
@@ -107,6 +125,25 @@ Default `~/.agents`. Structure it how you like. Example:
       coffee-ipsum.md
       hotdog-ipsum.md
 ```
+
+Example `rulesDir` array:
+
+```jsonc
+"rulesDir": [
+  {
+    "path": "~/.agents",
+    "includes": ["lorem-ipsum/developer-ipsum"],
+    "excludes": ["lorem-ipsum/developer-ipsum/legacy.md"]
+  },
+  {
+    "path": "./.agents",
+    "includes": "*" // pull every project rule, then apply optional excludes
+  }
+]
+```
+
+The CLI reads `~/.agents` first, then `./.agents`, so project files replace shared ones when their
+relative paths match. Use `enabled: false` in the project copy to remove a shared rule entirely.
 
 ## Rendering
 
@@ -138,24 +175,31 @@ order: 0 # default 0
 
 ## Include / exclude rules
 
-- Paths are relative to `rulesDir`.
+- Each `rulesDir` entry has its own `includes`/`excludes`. Paths are always relative to that entry’s
+  `path`.
 - Folder include: `"lorem-ipsum"` -> everything under that folder.
 - File include: `"lorem-ipsum/food-ipsum/hotdog-ipsum.md"` -> only that file.
+- Use `"*"` (string or single-item array) to include every Markdown file in the source directory
+  before applying excludes.
 - Root files: `"_index.md"`, `"overview.md"`.
-- Excludes use the same rules and take precedence.
-- No globs/wildcards; prefix or exact match.
+- Excludes use the same prefix rules and take precedence.
+- No globs/wildcards beyond `"*"`; prefix or exact match only.
 
 ### Validation and common errors
 
 The CLI validates configuration up‑front to avoid confusing runtime errors:
 
-- `includes` is required per block and must be a string or an array of non‑empty strings.
-- `excludes` is optional; if present it must be a string or an array of non‑empty strings.
+- Every block must provide a non-empty `rulesDir` array.
+- Each `rulesDir[i].path` must be a non-empty string.
+- Each `rulesDir[i].includes` is required (no block-level fallback) and must be `"*"`, a non-empty
+  string, or an array of non-empty strings (arrays may only contain `"*"` if it is the only entry).
+- `rulesDir[i].excludes` is optional per entry but, if present, must be a string or a non-empty
+  array of strings.
 
 If validation fails the CLI exits with code 1 and a helpful message, for example:
 
 ```text
-[error] block[0].includes must be a string or an array of non-empty strings
+[error] block[0].rulesDir[1].includes is required and must be a string or an array of non-empty strings
 ```
 
 Examples of accepted shapes:
@@ -166,14 +210,22 @@ Examples of accepted shapes:
     "title": "Subfolder rules",
     "outDir": "./resources",
     "files": ["AGENTS.md"],
-    "includes": "lorem-ipsum" // single string is OK
+    "rulesDir": [
+      { "path": "~/.agents", "includes": "lorem-ipsum" } // single string is OK
+    ]
   },
   {
     "title": "Root rules",
     "outDir": "./",
     "files": ["AGENTS.md"],
-    "includes": ["lorem-ipsum/developer-ipsum", "lorem-ipsum/food-ipsum"],
-    "excludes": "lorem-ipsum/food-ipsum/cupcake-ipsum.md" // single string is OK
+    "rulesDir": [
+      {
+        "path": "~/.agents",
+        "includes": ["lorem-ipsum/developer-ipsum", "lorem-ipsum/food-ipsum"],
+        "excludes": "lorem-ipsum/food-ipsum/cupcake-ipsum.md" // single string is OK
+      },
+      { "path": "./.agents", "includes": "*" }
+    ]
   }
 ]
 ```

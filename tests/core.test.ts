@@ -80,7 +80,11 @@ describe('tree building and rendering', () => {
   });
 
   test('includes/excludes filter correctly and sort folders', async () => {
-    const tree = await buildTree(rulesDirectory, ['laravel', 'git'], ['laravel/blade']);
+    const tree = await buildTree({
+      path: rulesDirectory,
+      includes: ['laravel', 'git'],
+      excludes: ['laravel/blade']
+    });
     const root = ensureNode(tree, '');
     expect([...root.children.keys()].sort()).toEqual(['git', 'laravel']);
     const laravel = root.children.get('laravel');
@@ -88,8 +92,25 @@ describe('tree building and rendering', () => {
     expect(laravel && laravel.children.has('blade')).toBe(false);
   });
 
+  test('includes "*" pulls every file before excludes apply', async () => {
+    const dir = await makeTemporaryDirectory();
+    await write(path.join(dir, 'shared/a.md'), 'Shared A');
+    await write(path.join(dir, 'shared/b.md'), 'Shared B');
+    await write(path.join(dir, 'legacy/old.md'), 'Legacy');
+
+    const tree = await buildTree({
+      path: dir,
+      includes: '*',
+      excludes: ['legacy']
+    });
+    const md = renderTree(tree, 'Wildcard Rules');
+    expect(md).toContain('=== A ===');
+    expect(md).toContain('=== B ===');
+    expect(md).not.toContain('Legacy');
+  });
+
   test('_index.md appears before rules and headings reflect depth', async () => {
-    const tree = await buildTree(rulesDirectory, ['react'], []);
+    const tree = await buildTree({ path: rulesDirectory, includes: ['react'] });
     const md = renderTree(tree, 'Front end rules');
     const index = md.indexOf('React intro');
     const rule = md.indexOf('=== Use Effect ===');
@@ -100,7 +121,7 @@ describe('tree building and rendering', () => {
   });
 
   test('order then filename sorting inside a folder', async () => {
-    const tree = await buildTree(rulesDirectory, ['laravel/blade'], []);
+    const tree = await buildTree({ path: rulesDirectory, includes: ['laravel/blade'] });
     const md = renderTree(tree, 'Blade Rules');
     const posCond = md.indexOf('=== Conditionals ===');
     const posComp = md.indexOf('=== Components ===');
@@ -119,7 +140,7 @@ describe('tree building and rendering', () => {
       'Sample body'
     );
 
-    const tree = await buildTree(deepRoot, ['react'], []);
+    const tree = await buildTree({ path: deepRoot, includes: ['react'] });
     const md = renderTree(tree, 'Front end rules', { maxHeadingDepth: 5 });
     expect(md).toContain('##### Queries');
     expect(md).not.toContain('###### More');
@@ -135,7 +156,7 @@ describe('tree building and rendering', () => {
     await write(path.join(deepRoot, 'react/hooks/data/queries/_index.md'), 'Queries intro');
     await write(path.join(deepRoot, 'react/hooks/data/queries/more/deeper/sample.md'), 'Body');
 
-    const tree = await buildTree(deepRoot, ['react'], []);
+    const tree = await buildTree({ path: deepRoot, includes: ['react'] });
     const md = renderTree(tree, 'Front end rules');
     expect(md).toContain('#### Data');
     expect(md).not.toContain('##### ');
@@ -150,7 +171,10 @@ describe('tree building and rendering', () => {
     await write(path.join(dir, 'overview.md'), 'Overview body');
     await write(path.join(dir, 'react/_index.md'), 'React intro');
 
-    const tree = await buildTree(dir, ['_index.md', 'overview.md', 'react'], []);
+    const tree = await buildTree({
+      path: dir,
+      includes: ['_index.md', 'overview.md', 'react']
+    });
     const md = renderTree(tree, 'Project rules');
 
     const indexH1 = md.indexOf('# Project rules');
@@ -167,7 +191,7 @@ describe('tree building and rendering', () => {
     const dir = await makeTemporaryDirectory();
     const raw = '\n\n   first line\nsecond line\n\n\n  \n';
     await write(path.join(dir, 'x/trim-test.md'), raw);
-    const tree = await buildTree(dir, ['x'], []);
+    const tree = await buildTree({ path: dir, includes: ['x'] });
     const md = renderTree(tree, 'Trim Rules');
 
     expect(md).toMatch(/=== Trim Test ===\n\nfirst line\nsecond line\n/);
@@ -184,8 +208,7 @@ describe('generation outputs', () => {
       title: 'T1',
       outDir: './out',
       files: ['one.md', 'two.md'],
-      includes: ['x'],
-      rulesDir: rulesDirectory
+      rulesDir: [{ path: rulesDirectory, includes: ['x'] }]
     };
     await generateForBlock(block, outRoot);
     const a = await fs.readFile(path.join(outRoot, 'out/one.md'), 'utf8');
@@ -195,7 +218,7 @@ describe('generation outputs', () => {
     expect(a.startsWith(`${banner}\n\n# T1`)).toBe(true);
   });
 
-  test('empty includes yields only the title section', async () => {
+  test('non-matching includes yield only the title section', async () => {
     const rulesDirectory = await makeTemporaryDirectory();
     await write(path.join(rulesDirectory, 'a/b.md'), 'Body');
     const outRoot = await makeTemporaryDirectory();
@@ -203,12 +226,50 @@ describe('generation outputs', () => {
       title: 'Only Title',
       outDir: './',
       files: ['x.md'],
-      includes: [],
-      rulesDir: rulesDirectory
+      rulesDir: [{ path: rulesDirectory, includes: ['missing'] }]
     };
     await generateForBlock(block, outRoot);
     const content = await fs.readFile(path.join(outRoot, 'x.md'), 'utf8');
     const banner = '<!-- Generated by @imjamesbarrett/agent-rules – do not edit directly. -->';
     expect(content.startsWith(`${banner}\n\n# Only Title`)).toBe(true);
+  });
+
+  test('rulesDir arrays merge directories with later entries overriding earlier ones', async () => {
+    const dirOne = await makeTemporaryDirectory();
+    const dirTwo = await makeTemporaryDirectory();
+    await write(path.join(dirOne, 'shared/_index.md'), 'Intro one');
+    await write(path.join(dirOne, 'shared/a.md'), 'First A');
+    await write(path.join(dirOne, 'shared/c.md'), 'Third C');
+    await write(path.join(dirOne, 'shared/info/_index.md'), 'Info intro');
+    await write(path.join(dirTwo, 'shared/_index.md'), 'Intro two');
+    await write(path.join(dirTwo, 'shared/a.md'), 'Second A');
+    await write(path.join(dirTwo, 'shared/b.md'), 'Second B');
+    await write(path.join(dirTwo, 'shared/c.md'), '---\nenabled: false\n---\nDo not show');
+    await write(
+      path.join(dirTwo, 'shared/info/_index.md'),
+      '---\nenabled: false\n---\nDo not show'
+    );
+
+    const outRoot = await makeTemporaryDirectory();
+    const block: GenerationBlock = {
+      title: 'Merged',
+      outDir: './',
+      files: ['merged.md'],
+      rulesDir: [
+        { path: dirOne, includes: ['shared'] },
+        { path: dirTwo, includes: '*' }
+      ]
+    };
+    await generateForBlock(block, outRoot);
+    const content = await fs.readFile(path.join(outRoot, 'merged.md'), 'utf8');
+    expect(content).toContain('Intro two');
+    expect(content).not.toContain('Intro one');
+    expect(content).toContain('=== A ===');
+    expect(content).toContain('Second A');
+    expect(content).not.toContain('First A');
+    expect(content).toContain('=== B ===');
+    expect(content).toContain('Second B');
+    expect(content).not.toContain('Third C');
+    expect(content).not.toContain('Info intro');
   });
 });

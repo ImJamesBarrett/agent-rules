@@ -10,13 +10,17 @@ function titleFromSegments(segments: string[]): string {
     .join(' / ');
 }
 
+export type RulesSource = {
+  path: string;
+  includes: string | string[];
+  excludes?: string | string[];
+};
+
 export type GenerationBlock = {
-  excludes?: string[];
   files: string[];
-  includes: string[];
   maxHeadingDepth?: number;
   outDir: string;
-  rulesDir?: string;
+  rulesDir: RulesSource[];
   title: string;
 };
 
@@ -97,11 +101,38 @@ export function normalizePrefixes(prefixes: string[] | undefined): string[] {
   if (!prefixes) return [];
   return prefixes
     .map((prefix) =>
-      toPosix(prefix)
+      toPosix(prefix.trim())
         .replace(/^\.\/+/, '')
         .replace(/^\/+/, '')
     )
     .filter((prefix) => prefix.length > 0);
+}
+
+function ensureArray(value: string | string[]): string[] {
+  return Array.isArray(value) ? value : [value];
+}
+
+type NormalizedRulesSource = {
+  pathAbs: string;
+  includesAll: boolean;
+  includes: string[];
+  excludes: string[];
+};
+
+function normalizeRulesSource(source: RulesSource): NormalizedRulesSource {
+  const expanded = expandHome(source.path);
+  const pathAbs = path.isAbsolute(expanded) ? expanded : path.resolve(expanded);
+
+  const includesRaw = ensureArray(source.includes).map((value) => value.trim());
+  const includesAll = includesRaw.length === 1 && includesRaw[0] === '*';
+  const includes = includesAll ? [] : normalizePrefixes(includesRaw);
+
+  const excludesRaw = source.excludes
+    ? ensureArray(source.excludes).map((value) => value.trim())
+    : [];
+  const excludes = normalizePrefixes(excludesRaw);
+
+  return { pathAbs, includesAll, includes, excludes };
 }
 
 export function relStartsWith(relativePath: string, prefix: string): boolean {
@@ -135,21 +166,19 @@ export function ensureNode(tree: Map<string, SectionNode>, folderRelative: strin
   return node;
 }
 
-export async function buildTree(
-  rulesDirectory: string,
-  includes: string[],
-  excludes: string[]
-): Promise<Map<string, SectionNode>> {
-  const tree = new Map<string, SectionNode>();
-  const files = await walkAllMarkdownFiles(rulesDirectory);
-  const inc = normalizePrefixes(includes);
-  const exc = normalizePrefixes(excludes);
+async function appendDirectoryToTree(
+  tree: Map<string, SectionNode>,
+  source: NormalizedRulesSource
+): Promise<void> {
+  const files = await walkAllMarkdownFiles(source.pathAbs);
 
   const included = files.filter(({ rel }) => {
-    if (inc.length === 0) return false;
-    const okInc = inc.some((p) => relStartsWith(rel, p));
-    if (!okInc) return false;
-    const blocked = exc.some((p) => relStartsWith(rel, p));
+    if (!source.includesAll) {
+      if (source.includes.length === 0) return false;
+      const okInc = source.includes.some((p) => relStartsWith(rel, p));
+      if (!okInc) return false;
+    }
+    const blocked = source.excludes.some((p) => relStartsWith(rel, p));
     return !blocked;
   });
 
@@ -163,22 +192,32 @@ export async function buildTree(
     const raw = await fs.readFile(file.abs, 'utf8');
     const parsed = matter(raw) as { data: FrontMatter | undefined; content: string };
     const frontmatter: FrontMatter = parsed.data ?? {};
-    if (frontmatter.enabled === false) continue;
     const order = typeof frontmatter.order === 'number' ? frontmatter.order : 0;
     const baseName = fileName.replace(/\.md$/i, '');
     const body = parsed.content.trim();
-    if (fileName.toLowerCase() === '_index.md') {
-      node.indexContent = body;
-    } else {
-      node.rules.push({
-        title: titleCase(baseName),
-        order,
-        fileName: baseName,
-        content: body
-      });
+    const isIndex = fileName.toLowerCase() === '_index.md';
+    const disabled = frontmatter.enabled === false;
+    if (isIndex) {
+      node.indexContent = disabled ? undefined : body;
+      continue;
     }
-  }
 
+    node.rules = node.rules.filter((rule) => rule.fileName !== baseName);
+    if (disabled) continue;
+
+    node.rules.push({
+      title: titleCase(baseName),
+      order,
+      fileName: baseName,
+      content: body
+    });
+  }
+}
+
+export async function buildTree(source: RulesSource): Promise<Map<string, SectionNode>> {
+  const tree = new Map<string, SectionNode>();
+  const normalized = normalizeRulesSource(source);
+  await appendDirectoryToTree(tree, normalized);
   return tree;
 }
 
@@ -258,24 +297,20 @@ export function renderTree(
 }
 
 export async function generateForBlock(block: GenerationBlock, outputRoot: string): Promise<void> {
-  const rulesDirectory = expandHome(block.rulesDir || path.join(os.homedir(), '.agents'));
-  const rulesDirectoryAbs = path.isAbsolute(rulesDirectory)
-    ? rulesDirectory
-    : path.resolve(rulesDirectory);
-  const rulesDirectoryExists = await pathExists(rulesDirectoryAbs);
-  if (!rulesDirectoryExists) {
-    console.warn(`[warn] rulesDir not found: ${rulesDirectoryAbs}`);
+  if (!block.rulesDir || block.rulesDir.length === 0) {
+    console.warn('[warn] rulesDir is empty; no rules will be included for this block');
   }
 
-  const includes = block.includes || [];
-  if (!includes || includes.length === 0) {
-    console.warn('[warn] includes is empty; no rules will be included for this block');
+  const tree = new Map<string, SectionNode>();
+  for (const source of block.rulesDir || []) {
+    const normalized = normalizeRulesSource(source);
+    const exists = await pathExists(normalized.pathAbs);
+    if (!exists) {
+      console.warn(`[warn] rulesDir not found: ${normalized.pathAbs}`);
+      continue;
+    }
+    await appendDirectoryToTree(tree, normalized);
   }
-  const excludes = block.excludes || [];
-
-  const tree = rulesDirectoryExists
-    ? await buildTree(rulesDirectoryAbs, includes, excludes)
-    : new Map<string, SectionNode>();
   if (!tree.has(''))
     tree.set('', {
       name: '',

@@ -4,11 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import stripJsonComments from 'strip-json-comments';
 
-import { expandHome, generateForBlock, type GenerationBlock } from './core.js';
-
-function isNonEmptyStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length > 0);
-}
+import { expandHome, generateForBlock, type GenerationBlock, type RulesSource } from './core.js';
 
 function getArgumentValue(argv: string[], key: string): string | undefined {
   const index = argv.findIndex((argument) => argument === key || argument.startsWith(key + '='));
@@ -16,6 +12,69 @@ function getArgumentValue(argv: string[], key: string): string | undefined {
   const token = argv[index];
   if (token.includes('=')) return token.split('=')[1];
   return argv[index + 1] && !argv[index + 1].startsWith('--') ? argv[index + 1] : undefined;
+}
+
+function validateStringList(value: unknown, ctx: string): string[] | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      console.error(`[error] ${ctx} must be a non-empty string or an array of non-empty strings`);
+      return undefined;
+    }
+    return [trimmed];
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    const out: string[] = [];
+    for (const [index, entry] of value.entries()) {
+      if (typeof entry !== 'string') {
+        console.error(`[error] ${ctx}[${index}] must be a non-empty string`);
+        return undefined;
+      }
+      const trimmed = entry.trim();
+      if (trimmed.length === 0) {
+        console.error(`[error] ${ctx}[${index}] must be a non-empty string`);
+        return undefined;
+      }
+      out.push(trimmed);
+    }
+    return out;
+  }
+  console.error(`[error] ${ctx} must be a string or an array of non-empty strings`);
+  return undefined;
+}
+
+function validateIncludesValue(value: unknown, ctx: string): string | string[] | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      console.error(`[error] ${ctx} must be a non-empty string or an array of non-empty strings`);
+      return undefined;
+    }
+    return trimmed;
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    const entries: string[] = [];
+    for (const [index, entry] of value.entries()) {
+      if (typeof entry !== 'string') {
+        console.error(`[error] ${ctx}[${index}] must be a non-empty string`);
+        return undefined;
+      }
+      const trimmed = entry.trim();
+      if (trimmed.length === 0) {
+        console.error(`[error] ${ctx}[${index}] must be a non-empty string`);
+        return undefined;
+      }
+      entries.push(trimmed);
+    }
+    if (entries.length === 1 && entries[0] === '*') return '*';
+    if (entries.includes('*')) {
+      console.error(`[error] ${ctx} may only contain "*" by itself to include all files`);
+      return undefined;
+    }
+    return entries;
+  }
+  console.error(`[error] ${ctx} must be a string or an array of non-empty strings`);
+  return undefined;
 }
 
 async function main() {
@@ -92,43 +151,63 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const rawIncludes: unknown = (bUnknown as Record<string, unknown>)['includes'];
-    if (rawIncludes === undefined) {
-      console.error(
-        `[error] ${ctx}.includes is required and must be a string or an array of non-empty strings`
-      );
+    const rawRulesDirectory: unknown = (bUnknown as Record<string, unknown>)['rulesDir'];
+    if (!Array.isArray(rawRulesDirectory) || rawRulesDirectory.length === 0) {
+      console.error(`[error] ${ctx}.rulesDir is required and must be a non-empty array`);
       process.exitCode = 1;
       return;
     }
-    {
-      let includesValidated: string[] | undefined;
-      if (typeof rawIncludes === 'string') {
-        includesValidated = [rawIncludes];
-      } else if (isNonEmptyStringArray(rawIncludes)) {
-        includesValidated = rawIncludes;
-      } else {
-        console.error(`[error] ${ctx}.includes must be a string or an array of non-empty strings`);
+
+    const validatedSources: RulesSource[] = [];
+    let sourceIndex = 0;
+    for (const entry of rawRulesDirectory as unknown[]) {
+      const entryContext = `${ctx}.rulesDir[${sourceIndex}]`;
+      if (!entry || typeof entry !== 'object') {
+        console.error(`[error] ${entryContext} must be an object with path and includes fields`);
         process.exitCode = 1;
         return;
       }
-      blockReference.includes = includesValidated;
-    }
+      const record = entry as Record<string, unknown>;
+      const pathValue = record['path'];
+      const trimmedPath = typeof pathValue === 'string' ? pathValue.trim() : '';
+      if (typeof pathValue !== 'string' || trimmedPath.length === 0) {
+        console.error(`[error] ${entryContext}.path is required and must be a non-empty string`);
+        process.exitCode = 1;
+        return;
+      }
 
-    const rawExcludes: unknown = (bUnknown as Record<string, unknown>)['excludes'];
-    if (rawExcludes !== undefined) {
+      const includesValue = record['includes'];
+      if (includesValue === undefined) {
+        console.error(
+          `[error] ${entryContext}.includes is required and must be a string or an array of non-empty strings`
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const includesValidated = validateIncludesValue(includesValue, `${entryContext}.includes`);
+      if (includesValidated === undefined) {
+        process.exitCode = 1;
+        return;
+      }
+
       let excludesValidated: string[] | undefined;
-      if (typeof rawExcludes === 'string') {
-        excludesValidated = [rawExcludes];
-      } else if (isNonEmptyStringArray(rawExcludes)) {
-        excludesValidated = rawExcludes;
-      } else {
-        console.error(`[error] ${ctx}.excludes must be a string or an array of non-empty strings`);
-        process.exitCode = 1;
-        return;
+      if (record['excludes'] !== undefined) {
+        excludesValidated = validateStringList(record['excludes'], `${entryContext}.excludes`);
+        if (excludesValidated === undefined) {
+          process.exitCode = 1;
+          return;
+        }
       }
 
-      blockReference.excludes = excludesValidated;
+      validatedSources.push({
+        path: trimmedPath,
+        includes: includesValidated,
+        excludes: excludesValidated
+      });
+      sourceIndex++;
     }
+
+    blockReference.rulesDir = validatedSources;
     index++;
   }
 

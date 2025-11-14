@@ -194,14 +194,15 @@ async function appendDirectoryToTree(
     const raw = await fs.readFile(file.abs, 'utf8');
     const parsed = matter(raw) as { data: FrontMatter | undefined; content: string };
     const frontmatter: FrontMatter = parsed.data ?? {};
-    const frontmatterOrder = typeof frontmatter.order === 'number' ? frontmatter.order : undefined;
-    const order = frontmatterOrder ?? 0;
+    const ruleFrontmatterOrder =
+      typeof frontmatter.order === 'number' ? frontmatter.order : undefined;
+    const order = ruleFrontmatterOrder ?? 0;
     const baseName = fileName.replace(/\.md$/i, '');
     const body = parsed.content.trim();
     const isIndex = fileName.toLowerCase() === '_index.md';
     const disabled = frontmatter.enabled === false;
     if (isIndex) {
-      node.sectionOrder = disabled ? undefined : frontmatterOrder;
+      node.sectionOrder = disabled ? undefined : ruleFrontmatterOrder;
       node.indexContent = disabled ? undefined : body;
       continue;
     }

@@ -3,8 +3,12 @@
     "title": "Project rules",
     "outDir": "./examples/out/",
     "files": ["AGENTS.md", "CLAUDE.md"],
-    "rulesDir": "./examples/rules",
-    "includes": ["lorem-ipsum"],
-    "excludes": ["lorem-ipsum/animal-ipsum/hedgehog-ipsum.md"]
+    "rulesDir": [
+      {
+        "path": "./examples/rules",
+        "includes": ["lorem-ipsum"],
+        "excludes": ["lorem-ipsum/animal-ipsum/hedgehog-ipsum.md"]
+      }
+    ]
   }
 ]

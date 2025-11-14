@@ -12,6 +12,7 @@ import {
   normalizePrefixes,
   relStartsWith,
   renderTree,
+  sortTreeChildren,
   titleCase,
   toPosix
 } from '../src/core.js';
@@ -126,6 +127,20 @@ describe('tree building and rendering', () => {
     const posCond = md.indexOf('=== Conditionals ===');
     const posComp = md.indexOf('=== Components ===');
     expect(posCond).toBeLessThan(posComp);
+  });
+
+  test('section order uses _index.md order before alphabetical fallback', async () => {
+    const dir = await makeTemporaryDirectory();
+    await write(path.join(dir, 'overview/_index.md'), '---\norder: 1\n---\nOverview intro');
+    await write(path.join(dir, 'billing/_index.md'), '---\norder: 2\n---\nBilling intro');
+    await write(path.join(dir, 'api/_index.md'), '---\norder: 3\n---\nAPI intro');
+    await write(path.join(dir, 'guides/_index.md'), 'Guides intro (no order)');
+    await write(path.join(dir, 'alpha/rules.md'), 'Alpha body');
+
+    const tree = await buildTree({ path: dir, includes: '*' });
+    const root = ensureNode(tree, '');
+    sortTreeChildren(root);
+    expect([...root.children.keys()]).toEqual(['overview', 'billing', 'api', 'alpha', 'guides']);
   });
 
   test('maxHeadingDepth=5 flattens deeper folders and prefixes titles', async () => {

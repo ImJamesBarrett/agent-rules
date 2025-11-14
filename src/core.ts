@@ -35,6 +35,7 @@ export type SectionNode = {
   children: Map<string, SectionNode>;
   depth: number;
   indexContent?: string;
+  sectionOrder?: number;
   name: string;
   path: string;
   rules: Rule[];
@@ -154,6 +155,7 @@ export function ensureNode(tree: Map<string, SectionNode>, folderRelative: strin
     path: posixRelative,
     depth,
     indexContent: undefined,
+    sectionOrder: undefined,
     rules: [],
     children: new Map()
   };
@@ -192,12 +194,14 @@ async function appendDirectoryToTree(
     const raw = await fs.readFile(file.abs, 'utf8');
     const parsed = matter(raw) as { data: FrontMatter | undefined; content: string };
     const frontmatter: FrontMatter = parsed.data ?? {};
-    const order = typeof frontmatter.order === 'number' ? frontmatter.order : 0;
+    const frontmatterOrder = typeof frontmatter.order === 'number' ? frontmatter.order : undefined;
+    const order = frontmatterOrder ?? 0;
     const baseName = fileName.replace(/\.md$/i, '');
     const body = parsed.content.trim();
     const isIndex = fileName.toLowerCase() === '_index.md';
     const disabled = frontmatter.enabled === false;
     if (isIndex) {
+      node.sectionOrder = disabled ? undefined : frontmatterOrder;
       node.indexContent = disabled ? undefined : body;
       continue;
     }
@@ -223,7 +227,16 @@ export async function buildTree(source: RulesSource): Promise<Map<string, Sectio
 
 export function sortTreeChildren(node: SectionNode): void {
   node.rules.sort((a, b) => a.order - b.order || a.fileName.localeCompare(b.fileName));
-  const entries = [...node.children.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const entries = [...node.children.entries()].sort((a, b) => {
+    const aOrder = a[1].sectionOrder;
+    const bOrder = b[1].sectionOrder;
+    const aHas = typeof aOrder === 'number';
+    const bHas = typeof bOrder === 'number';
+    if (aHas && bHas) return aOrder - bOrder || a[0].localeCompare(b[0]);
+    if (aHas) return -1;
+    if (bHas) return 1;
+    return a[0].localeCompare(b[0]);
+  });
   node.children = new Map(entries);
   for (const [, child] of node.children) sortTreeChildren(child);
 }

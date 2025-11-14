@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 <!-- markdownlint-disable MD024 -->
 
+## [0.3.0] - 2025-11-14
+
+### Added
+
+- Allow `_index.md` `order` front-matter to control section ordering, so overview folders can
+  surface above alphabetical sections while preserving their nested children.
+
 ## [0.2.0] - 2025-11-14
 
 ### Added

@@ -169,7 +169,8 @@ async function main() {
       }
       const record = entry as Record<string, unknown>;
       const pathValue = record['path'];
-      if (typeof pathValue !== 'string' || pathValue.trim().length === 0) {
+      const trimmedPath = typeof pathValue === 'string' ? pathValue.trim() : '';
+      if (typeof pathValue !== 'string' || trimmedPath.length === 0) {
         console.error(`[error] ${entryContext}.path is required and must be a non-empty string`);
         process.exitCode = 1;
         return;
@@ -199,7 +200,7 @@ async function main() {
       }
 
       validatedSources.push({
-        path: pathValue,
+        path: trimmedPath,
         includes: includesValidated,
         excludes: excludesValidated
       });
